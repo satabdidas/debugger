@@ -49,7 +49,7 @@ int count_instructions(pid_t pid) {
     ++counter;
     if (ptrace(PTRACE_SINGLESTEP, pid, 0, 0) < 0) {
       perror("Error in ptrace\n");
-      return;
+      return 0;
     }
 
     wait(&wait_status);
@@ -58,45 +58,54 @@ int count_instructions(pid_t pid) {
   return counter;
 }
 
-unsigned set_breakpoint(pid_t pid, unsigned addr) {
-  unsigned data = ptrace(PTRACE_PEEKTEXT, pid, (void *) addr, 0);
-  unsigned old_data = data;
+long set_breakpoint(pid_t pid, unsigned long int addr) {
+  long data = ptrace(PTRACE_PEEKTEXT, pid, (void *) addr, 0);
+  long old_data = data;
 
   printf("Setting a breakpoint at %x\n", addr);
   printf("Value at the address %x %x\n", addr, data);
-  data = (data & ~0xff) | 0xcc; 
+  data = (data & ~0xff) | 0xcc;
   ptrace(PTRACE_POKETEXT, pid, (void *)addr, data);
   printf("Value at the address %x after setting the int 3 opcode %x\n", addr, data);
   printf("Done setting the breatpoint at %x\n\n", addr);
   return old_data;
 }
 
-void set_rip(pid_t pid, unsigned addr) {
+void set_rip(pid_t pid, unsigned long int addr) {
   struct user_regs_struct regs;
 
   printf("Setting the instruction pointer to address %x\n", addr);
   memset(&regs, 0, sizeof(regs));
   ptrace(PTRACE_GETREGS, pid, NULL, &regs);
+#ifdef __i386__
   regs.eip = addr;
+#else
+  regs.rip = addr;
+#endif
   ptrace(PTRACE_SETREGS, pid, NULL, &regs);
   printf("Done setting the instruction pointer\n\n");
 }
 
-unsigned get_rip(pid_t pid) {
+unsigned long int get_rip(pid_t pid) {
   struct user_regs_struct regs;
   ptrace(PTRACE_GETREGS, pid, NULL, &regs);
+#ifdef __i386__
   return regs.eip;
+#else
+  return regs.rip;
+#endif
 }
 
 void run_debugger(pid_t pid) {
   int wait_status;
-  unsigned addr = 0x80483e9;
+  unsigned long int addr = 0x80483e9;
+  /* unsigned long int addr = 0x400534; */
 
   /* Wait for the child to stop first */
   wait(&wait_status);
 
   /* Set breakpoint at the address - 80483e9 */
-  unsigned old_data = set_breakpoint(pid, addr);
+  long old_data = set_breakpoint(pid, addr);
   ptrace(PTRACE_CONT, pid, NULL, NULL);
   wait(&wait_status);
 
